@@ -68,7 +68,7 @@ extern crate quote;
 
 use proc_macro::TokenStream;
 
-#[proc_macro_derive(Display)]
+#[proc_macro_derive(Display, attributes(display))]
 #[doc(hidden)]
 pub fn display(input: TokenStream) -> TokenStream {
     // Parse the string representation
@@ -100,11 +100,24 @@ fn impl_display(name: &syn::Ident, data: &syn::DataEnum) -> proc_macro2::TokenSt
 
 fn impl_display_for_variant(name: &syn::Ident, variant: &syn::Variant) -> proc_macro2::TokenStream {
     let id = &variant.ident;
+
+    let variant_str = match variant
+        .attrs
+        .iter()
+        .find(|a| a.path.get_ident().map_or(false, |i| i == "display"))
+    {
+        Some(display_attr) => {
+            let lit: proc_macro2::Literal = display_attr.parse_args().unwrap();
+            lit.to_string().trim_matches('"').to_string()
+        }
+        None => id.to_string(),
+    };
+
     match variant.fields {
         syn::Fields::Unit => {
             quote! {
                 #name::#id => {
-                    f.write_str(stringify!(#id))
+                    f.write_str(#variant_str)
                 }
             }
         }
@@ -113,7 +126,7 @@ fn impl_display_for_variant(name: &syn::Ident, variant: &syn::Variant) -> proc_m
                 0 => {
                     quote! {
                         #name::#id() => {
-                            f.write_str(stringify!(#id))?;
+                            f.write_str(#variant_str)?;
                             f.write_str("()")
                         }
                     }
